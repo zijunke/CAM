@@ -17,7 +17,7 @@ wrbugs <- function(ri,ni,mu.L,V.L,ind.L,gphi,initials,nburnin=1,niter=30001,nthi
 	tryi = 1
 	fit = cam.bugs(ri,ni,mu.L,V.L,ind.L,gphi,initials,niter,prior)
 	fit = cam.bugs(ri,ni,mu.L,V.L,ind.L,gphi,fit$initials,niter,prior)
-	for(tryi in 3:20){
+	for(tryi in 2:20){
 		fit.coda <- mcmc(data = fit$mcmc.chain,start = nburnin+1,end = niter,thin = nthin)
 		conv = geweke.diag(fit.coda)[[1]]
 		if(sum(abs(conv)>1.96)==0){

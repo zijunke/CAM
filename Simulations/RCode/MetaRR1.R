@@ -30,9 +30,9 @@ for(i in 2:length(Nstudy.all)){
 	resample.s[[i]] = sample(1:nrow(ind.All$L),Nstudy.all[i],replace = T)
 }
 
-sdPhii = 2
+sdPhii = 1
 sdLi = sdPhii
-Ri = 2
+Ri = 1
 SRi = 1
 RRi = 1
 NSi = 1

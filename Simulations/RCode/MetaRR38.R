@@ -5,14 +5,13 @@ library(metafor)
 library(hbmem)
 library(truncnorm)
 
-wd = '/home/ZijunKe/Research/MetaR/Simulation4/'
+wd = '/home/ZijunKe/Research/MetaR/Simulation5/'
 #wd <- "E:/MetaR/Simulation3/"
 openbugs.d = NULL
 source(paste(wd,'RCode/RFuncs_Sim.R',sep=''))
 
 nsim = 500
-n.iter = 60000
-n.burnin = 30000
+n.iter = 10000
 Nstudy.all = c(28,60,100)
 mu.N.all = c(150,350)
 
@@ -107,7 +106,7 @@ if(is.na(mrr[simi,1])==0){
    # Bayesian methods
    inits = list(rho0 = 0,V.rho = 0.09,Phi = rep(0,3),rhoi = r)
    prior = list(Phi = list(mu = rep(0,3),sigma = rep(100,3)))
-   res = try(wrbugs(r,N,vL.obs,V.L,indL,indP,inits,nburnin=1,niter=10000,nthin=1,prior))
+   res = try(wrbugs(r,N,vL.obs,V.L,indL,indP,inits,nburnin=1,niter=n.iter,nthin=1,prior))
    if(inherits(res,'try-error')==0){
 	org.res(simi,res,out.fn[3],T.Values[[3]],prm[[3]])
    }else{
