@@ -1,0 +1,143 @@
+---
+title: "CAM: Extroversion and SWB; Retrospective Analysis"
+author: "Zijun Ke & Xin Tong"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+### R Packages, functions, and working directory
+```{r,message=FALSE}
+# Load packages and functions
+#--------------------------------------------
+library(metafor)    # standard meta-analyses
+library(xlsx)       # read in .xlsx files
+library(lavaan)     # for CFA analysis
+library(MASS)       # for bayesian sampling
+library(hbmem)      # for bayesian sampling
+library(truncnorm)  # for bayesian sampling
+library(coda)       # for bayesian sampling
+# load developed R functions for CAM
+source('D:/Research/180307A/MetaR/RealData2/CAM_Funcs.R')
+
+# Set working directory
+#--------------------------------------------
+wd = 'D:/Research/180307A/MetaR/RealData2/'
+setwd(wd)
+```
+### Function implementing the retrospective analysis for CAM
+```{r}
+# rho: the mean correlation
+# sd.rho: between-study SD in correlation
+# ni: sample sizes of primary studies
+# mu.L: square root of reliability estimates of all measures
+# V.L: precision of reliability estimates
+# ind.L: reliability indicator; I_x and I_y
+# Phi: residual correlations
+# gphi: residual correlation indicator: I_phi
+# nSim: number of replications
+# nburnin: number of iterations in burnin period
+# niter: number of iterations
+# nthin: thinning
+RetroAnalysis <- function(rho,sd.rho,ni,mu.L,V.L,ind.L,Phi,gphi,prior,
+                      nSim,nburnin=1,niter=5000,nthin=1){
+ 
+  rri = mu.L[ind.L[,1]]*mu.L[ind.L[,2]]   # study reliability
+  if(sum(gphi==0)==0){  phii = Phi[gphi]  # study residual correlation
+  }else{  
+    Phi = c(Phi,0)
+    gphi0 = gphi; gphi0[gphi==0] = max(gphi)+1
+    phii = Phi[gphi0]
+  }
+  
+  Sig.Res = replicate(nSim,{
+    k = length(ni)
+    rhoi = rnorm(k,rho,sd.rho)
+    rhoi.adj = rhoi*rri+phii
+    ri = rep(NA,k)
+    for(ki in 1:k){
+      Pi = diag(1,2)
+      Pi[1,2] = Pi[2,1] = rhoi.adj[ki] 
+      dati = mvrnorm(ni[ki],rep(0,2),Pi)
+      ri[ki] = cor(dati)[2,1]
+    }
+    
+    initials = list(rho0 = 0,V.rho = 0.01,Phi = rep(0,max(gphi)),rhoi = ri)
+    CAM = cam(ri,ni,mu.L,V.L,ind.L,gphi=gphi,initials,
+              nburnin=nburnin,niter=niter,nthin=nthin,prior)
+    resl = out.res(CAM)
+    CV = apply(cbind(resl$CI[c(1,3),],c(rho,sd.rho)),1,
+               function(x){(x[1]<x[3])*(x[2]>x[3])}) 
+    resm = rbind(resl$Estimate[c(1,3)],resl$PosteriorSD[c(1,3)],
+                 CV,resl$Sig[c(1,3)])
+    return(resm)
+  }  )
+  
+  True.Value = c(rho,sd.rho)
+  Bias = apply(Sig.Res[1,,],1,mean) - True.Value
+  Relative.Bias = Bias/True.Value
+  Para.Bias = rbind(True.Value,Bias,Relative.Bias)
+  
+  Empirical.SE = apply(Sig.Res[1,,],1,sd)
+  ASE = apply(Sig.Res[2,,],1,mean)
+  Bias = ASE-Empirical.SE
+  Relative.Bias = Bias/Empirical.SE
+  SE.Bias = rbind(Empirical.SE,Bias,Relative.Bias)
+  
+  CR = apply(Sig.Res[3,,],1,mean)
+  Power = apply(Sig.Res[4,,],1,mean)
+  return(list(Parameter.Bias=Para.Bias,SE.Bias = SE.Bias,
+              Coverage.Rate=CR,Power=Power))
+}
+```
+
+## Retrospective Analysis
+### Data preparation
+```{r}
+# Read in data from the example meta-analysis: SWB and Extroversion
+#------------------------------------------------------------
+dall = read.xlsx('t1.xlsx',1)     # Table 1
+dall2 = read.xlsx('t1.xlsx',2)    # L and Cov(L) from the extra CFA studies
+
+# Get data ready
+gphi = dall$gphi                  # residual correlation indicator
+ni = dall$ni                      # sample sizes
+ind.L = dall[,c(1,2)]             # reliability indicators
+mu.L = c(dall2[,1])               # reliability estimates
+V.L = as.matrix(dall2[,2:9])      # precision of reliability estimates
+Phi = c(0.16,0.19,0.11)           # residual correlations
+# uninformative prior
+prior = list(Phi=list(mu=rep(0,max(gphi)), sigma=rep(100,max(gphi))))
+```
+### Retrospective Power Analysis for CAM
+#### Power of the test of the mean correlation
+```{r}
+# Power of CAM to detect a mean correlation of 0.2 given estimated between-study
+#     SD, the sample sizes of primary studies, reliability estimates, their 
+#     precision, and residual correlations
+Power.rho0 = RetroAnalysis(rho=0.2,sd.rho=0.2,ni=ni,mu.L=mu.L,V.L=V.L,
+              ind.L=ind.L,Phi=Phi,gphi=gphi,prior=prior,nSim = 1000)
+Power.rho0$Power['rho0']
+```
+#### Power of the test of the between-study SD
+```{r}
+# Power of CAM to detect a between-study SD of 0.1 given the estimated mean
+#     correlation, the sample sizes of primary studies, reliability estimates,  
+#     their precision, and residual correlations
+Power.sd.rho = RetroAnalysis(rho=0.48,sd.rho=0.1,ni=ni,mu.L=mu.L,V.L=V.L,
+              ind.L=ind.L,Phi=Phi,gphi=gphi,prior=prior,nSim = 1000)
+Power.sd.rho$Power['sd.rho']
+```
+### Retrospective Analysis for CAM
+```{r}
+# Retrospective analysis examining whether the number of primary studies exempt 
+#     from residual correlations is sufficient
+MC.Retro = RetroAnalysis(rho=0.48,sd.rho=0.2,ni=ni,mu.L=mu.L,V.L=V.L,
+              ind.L=ind.L,Phi=Phi,gphi=gphi,prior=prior,nSim = 1000)
+MC.Retro
+```
